@@ -6,18 +6,30 @@
 
         PUBLIC  main                    ; make the main label vissible
                                         ; outside this module
-        ORG     0FFFEh
-        DC16    init                    ; set reset vector to 'init' label
 
-        ORG     01C00h                  ; start of RAM
+        ORG     01C00h                  ; To count how many times button S1 
+
+;pushCount dw    0                       ; is pressed
 
 ;Digits      0     1     2     3     4     5    6    7      8     9
 DigitH  db 0xFC, 0x60, 0xDB, 0xF3, 0x67, 0xB7, 0xBF, 0xE0, 0xFF, 0xE7
 DigitL  db 0x28, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 
-;Letters    O      P     T     I     N     R    E      A     D     L    G
-letterH db 0xFC, 0xCF, 0x80, 0x90, 0x6C, 0xCF, 0x9F, 0xEF, 0xF0, 0x1C, 0xBD
-letterL db 0x00, 0x00, 0x50, 0x50, 0x82, 0x02, 0x00, 0x00, 0x50, 0x00, 0x00
+;Letters    O      P     T     I     N     R    E      A     D     L    G     B       P       M
+letterH db 0xFC, 0xCF, 0x80, 0x90, 0x6C, 0xCF, 0x9F, 0xEF, 0xF0, 0x1C, 0xBD, 0xF1,   0xCF,   0x6C
+letterL db 0x00, 0x00, 0x50, 0x50, 0x82, 0x02, 0x00, 0x00, 0x50, 0x00, 0x00, 0x50,   0x00,   0xA0
+
+
+        ORG     0FFDAh                  ; Set interrupt vector for input in P1.
+        ;DC16    PORT1_ISR              ; Interupt label
+        
+        
+        ORG     0FFFEh
+        DC16    init                    ; set reset vector to 'init' label
+
+        ORG     01C00h                  ; start of RAM
+
+
 
         RSEG    CSTACK                  ; pre-declaration of segment
         RSEG    CODE                    ; place program in 'CODE' segment
@@ -31,7 +43,19 @@ main:   NOP                             ; main program
         MOV.W   #0xffff,&LCDCPCTL0
         MOV.W   #0xfc3f,&LCDCPCTL1
         MOV.W   #0x0fff,&LCDCPCTL2
+        
+        bic.b   #0xFF,&P1SEL0           ; Set PxSel0 and PxSel1 to digital I/O
+        bic.b   #0xFF,&P1SEL1           ; Digital I/O is the default
+        bic.b   #0xFF,&P9SEL0
+        bic.b   #0xFF,&P9SEL1
 
+        mov.b   #11111001B,&P1DIR       ; Set P1.1 and P1.2 for input and all
+                                        ; other P1 pins for output
+
+        bis.b   #0xFF,&P9DIR            ; Set all P9 pins for output
+
+        bic.b   #00000001b, &P1OUT      ; Turn off red and green LEDs
+        bic.b   #10000000b, &P9OUT
 
 SetupP1:
         bic.b   #0xFF,&P1SEL0           ; Set PxSel0 and PxSel1 to digital I/O
@@ -43,12 +67,15 @@ SetupP1:
                                         ; other P1 pins for outpuu
         bis.b   #0xFF,&P9DIR            ; Set all P9 pins for output
 
-        mov.b   #00000110B,&P1REN       ; Activate P1.1 and P1.2 programable
-                                        ; pull-up/pull-down resistors
-        bis.b   #00000110B,&P1OUT       ; Set resistors for P1.1 and P1.2 as
-                                        ; as pull-down
         bic.b   #0x01,&P1OUT            ; Clear P1.0 and P9.7 output latch to
         bic.b   #0x80,&P9OUT            ; start with both off
+
+        bis.b   #06h, &P1REN            ; P1.1 Resistor enabled as pullup
+        bis.b   #06h, &P1OUT            ; resistor because pushing button
+                                        ; connects it to ground
+        bis.b   #06h, &P1IE             ; Enable interrupt at P1.1
+        bis.b   #06h, &P1IES            ; Set interrupt on high-to-low 
+                                        ; transition of P1.1
 
 UnlockGPIO:                             ; Disable de GPIO power-on default
         bic.w   #LOCKLPM5,&PM5CTL0      ; high-impedance mode to activade
@@ -71,8 +98,23 @@ nextDigitSetup:
         
         
 Mainloop:
+
         CALL    #Start
         JMP $
+
+        ;NOP                             ; NOP before setting GIE required by
+                                        ; the architecture
+        ;bis.w   #GIE,SR 	        ; Interrupts enabled (same as eint)
+                                        ; so that the micro reacts to 
+                                        ; interrupts
+        ;nop                             ; Wait after setting interrupt bit
+
+;        bis     #LPM0,SR                ; Enter Low Power Mode 0
+        ;NOP
+
+        ;JMP $                           ; jump to current location '$'
+        ;NOP 
+
         
 
 Start:
@@ -110,6 +152,7 @@ Reads:
         Call    #DrawLetter3
         inc     R5
         Call    #DrawLetter4
+        Call    #Delay
         jmp     Sequence2
         
 
@@ -133,6 +176,7 @@ Log:
         Call    #DrawLetter2
         pop     R5
         Call    #DrawLetter3
+        Call    #Delay
         jmp     Sequence2
 
 NextDigit:
@@ -207,6 +251,11 @@ DrawLetter6:
 ClearLCD:
         MOV.W   #2,&LCDCMEMCTL
         jmp     fin
+        
+        
+intReturn:
+
+        reti                            ; Return from interrupt
     
 fin:    RET
 
