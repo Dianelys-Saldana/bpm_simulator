@@ -11,13 +11,17 @@
 
 ;pushCount dw    0                       ; is pressed
 
-;Digits      0     1     2     3     4     5    6    7      8     9
-DigitH  db 0xFC, 0x60, 0xDB, 0xF3, 0x67, 0xB7, 0xBF, 0xE0, 0xFF, 0xE7
-DigitL  db 0x28, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+;Digits      0     1     2     3     4     5     6     7     8     9      B     P     M   
+DigitH   db 0xFC, 0x60, 0xDB, 0xF3, 0x67, 0xB7, 0xBF, 0xE0, 0xFF, 0xE7, 0xF1, 0xCF, 0x6C
+DigitL   db 0x28, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0x00, 0xA0
 
 ;Letters    O      P     T     I     N     R    E      A     D     L    G     B       P       M
 letterH db 0xFC, 0xCF, 0x80, 0x90, 0x6C, 0xCF, 0x9F, 0xEF, 0xF0, 0x1C, 0xBD, 0xF1,   0xCF,   0x6C
 letterL db 0x00, 0x00, 0x50, 0x50, 0x82, 0x02, 0x00, 0x00, 0x50, 0x00, 0x00, 0x50,   0x00,   0xA0
+
+;Bat Seg     0     1     2     3     4     5    6
+BatH     db 0x10, 0x30, 0x30, 0x70, 0x70, 0xF0, 0xF0
+BatL     db 0x00, 0x00, 0x20, 0x20, 0x60, 0x60, 0xE0
 
 
         ORG     0FFDAh                  ; Set interrupt vector for input in P1.
@@ -247,14 +251,318 @@ DrawLetter6:
         MOV.B     letterL(R5),0xA20+1(R11)
         ret
         
-        
+;[CALC BPM]------------------------------------------------------------------------------------------------------------------------------
+CalcBPM:
+;Check if R6 is 6,12,18,24, or 30
+
+      push.w R5 ;Push R5 since we may or may not modify it
+      push.w R11 ;Push R11 since we'll use it as our counter.
+      push.w R12 ;Push R12 since we'll use it as our divide/multiply number
+
+      mov.w #0, R11 ;Make sure our counter is at 0 you silly potato.
+      mov.w #0, R7 ;Reset R7 since we're going to recalculate it.
+
+
+     cmp.w #6,R6
+     jeq CalcBPM6
+     
+     cmp.w #12,R6
+     jeq CalcBPM12
+     
+     cmp.w #18,R6
+     jeq CalcBPM18
+     
+     cmp.w #24,R6
+     jeq CalcBPM24
+     
+     cmp.w #30,R6
+     jeq CalcBPM30
+
+CalcBPMPreRet:
+    pop R12 ;p o p
+    pop R11 ;Return R11 to its before state
+    pop R5 ;Same with R5
+
+    ret ;Now let's get the blazes out of here.
+    
+CalcBPM6:
+    ;If 6, add the contents of R5 10 times into R7.
+    mov.w #10,R12
+    call #CalcBPMMultiply
+    jmp CalcBPMPreRet ;OK we're done time to go back.
+    
+CalcBPM12:
+    ;If 12, Add the contents of R5 5 times into R7.
+    mov.w #5,R12
+    call #CalcBPMMultiply
+    jmp CalcBPMPreRet
+    
+CalcBPM18:
+    ;If 18, Add the contents of R5 3 times into R7, then add one to R7 for each time you can subtract 3 from R5 until what's left in R5 is less than 3
+    mov.w #3,R12
+    call #CalcBPMMultiply
+    
+    ;mov.w #3,R12 ;Oh hey we don't actually have to change R12
+    Call #CalcBPMDivide
+    
+    jmp CalcBPMPreRet
+    
+CalcBPM24:
+;If 24, Add the contents of R5 2 times into R7, then add one to R7 for each time you can subtract 2 from R5 until what's left in R5 is less than 2
+    mov.w #2,R12
+    call #CalcBPMMultiply
+    call #CalcBPMDivide ;We also don't have to change R12 here either. Que lindo
+    jmp CalcBPMPreRet
+    
+CalcBPM30:
+    ;If 30, Add the contents of R5 2 times into R7.
+    mov.w #2,R12
+    call #CalcBPMMultiply
+    jmp CalcBPMPreRet
+    
+CalcBPMMultiply:
+    ;Add R5 to R7 the number of times specified in R12.
+    add.w R5,R7 ;Add R5 to R7
+    inc.w R11 ;Increment R11
+    cmp.w R12,R11 ;If R11 isn't yet R12 (IE We've added R5 to R7 R12 times) 
+    jne CalcBPMMultiply ;Jump back to CalcBPMMultiply
+    ret
+    
+CalcBPMDivide:
+    sub.w R12,R5 ;Subtract R12 from R5
+    inc.w R7 ; Increment R7
+    cmp.w R12,R5 ; Compare R5 to R12
+    jge CalcBPMDivide ;If R5 is greater or equal to R12 (IE There's still enough to subtract once more) then subtract once more.
+    ret ;If not then we're done.
+
+;[SAVE BPM]------------------------------------------------------------------------------------------------------------------------------
+
+SaveBPM:
+    push.w R11 ; Will be used as index
+
+    mov.w #0,R11
+    mov.w 0x1982(R11),0x1984(R11) ;Move 0x001982 to 0x001984
+    mov.w 0x1980(R11),0x1982(R11) ;Move 0x001980 to 0x001982
+    mov.w R7,0x1980(R11) ;Move R7 to 0x001980
+    pop.w R11
+    ret
+
+;[DRAW INFO]------------------------------------------------------------------------------------------------------------------------------
+
+DrawInfo:
+    push.w R11
+    mov.b #1,R11
+    mov.b BatH(R8),0xA30(R11)
+    mov.b BatL(R8),0xA2C(R11)    
+    
+    cmp #6,R8
+    jeq DrawBat6
+
+;Draw the set amount of battery pegs in R8
+;If R8=6, set R8=0, then run Draw Beats
+    
+DrawInfoCont:
+    pop.w R11
+    inc.w R8
+    ret
+
+DrawBat6:
+    mov.w #0,R8
+    call #CalcBPM
+    call #DrawBPM
+    jmp DrawInfoCont
+
+;Draws the BPM onto the LCD (000BPM)
+DrawBPM:
+    push.w R6
+    push.w R11
+    push.w R5
+    
+;Draw 0s on every spot
+    mov.w #0,R5
+    call #DrawDigit1
+    call #DrawDigit2
+    call #DrawDigit3
+
+;Draw the word "BPM"
+    mov.w #10,R5
+    call #DrawDigit4
+    mov.w #11,R5
+    call #DrawDigit5
+    mov.w #12,R5
+    call #DrawDigit6
+    
+;Move R7 to R5 so we can draw it
+    mov.w R7,R5
+
+;By default we're going to draw on position 3
+    mov.w #3,R6
+
+;Determine what position to draw the BPM
+    cmp #100,R5
+    jge DrawBPMOver100 ;Sets position to 1
+    cmp #10,R5
+    jge DrawBPMOver10 ;Sets position to 2
+
+DrawBPMCont:
+    call #DrawIntDirect
+
+    pop.w R5
+    pop.w R11
+    pop.w R6
+    
+    ret
+
+DrawBPMOver100:
+    ;If it's 100 or greater, draw it at position 1    
+    mov.w #1,R6
+    jmp DrawBPMCont
+
+DrawBPMOver10:
+    ;If it's 10 or greater, draw it at position 2
+    mov.w #2,R6
+    jmp DrawBPMCont
+
+;[DRAW INT (Re-Used)]------------------------------------------------------------------------------------------------------------------------------
+
+;Draws an unsigned (assume positive) integer WITHOUT ensuring that R5, R6, and R11 are preserved.
+DrawIntDirect:
+      mov.b #0,R11 ;reset R11 becuase we're going to use it to *count*
+
+      cmp.w #1000,R5
+      jge DrawIntOver1000 ;If it's over 1000
+
+      cmp.w #100,R5
+      jge DrawIntOver100 ;If it's over 100
+
+      cmp.w #10,R5
+      jge DrawIntOver10 ;If it's over 10
+DrawDigit:
+
+      ;Draw the specific digit
+      cmp.b #6,R6
+      jeq DrawDigit6
+      
+      cmp.b #5,R6
+      jeq DrawDigit5
+      
+      cmp.b #4,R6
+      jeq DrawDigit4
+      
+      cmp.b #3,R6
+      jeq DrawDigit3
+      
+      cmp.b #2,R6
+      jeq DrawDigit2
+      
+      cmp.b #1,R6
+      jeq DrawDigit1
+
+      ret
+
+DrawDigit1:
+      MOV.B #9,R11 ;Reuse R11 because why not
+      MOV.B DigitH(R5),0xA20(R11)
+      MOV.B DigitL(R5),0xA20+1(R11)
+ret
+
+DrawDigit2:
+      MOV.B #5,R11
+      MOV.B DigitH(R5),0xA20(R11)
+      MOV.B DigitL(R5),0xA20+1(R11)
+ret
+
+DrawDigit3:
+      MOV.B #3,R11
+      MOV.B DigitH(R5),0xA20(R11)
+      MOV.B DigitL(R5),0xA20+1(R11)
+ret
+
+DrawDigit4:
+      MOV.B #2,R11
+      MOV.B DigitH(R5),0xA30(R11)
+      MOV.B DigitL(R5),0xA30+1(R11)
+ret
+
+DrawDigit5:
+      MOV.B #14,R11
+      MOV.B DigitH(R5),0xA20(R11)
+      MOV.B DigitL(R5),0xA20+1(R11)
+ret
+
+DrawDigit6:
+      MOV.B #7,R11
+      MOV.B DigitH(R5),0xA20(R11)
+      MOV.B DigitL(R5),0xA20+1(R11)
+ret
+
+;;;;;;;;;;DRAWINT SUBROUTINES;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+DrawIntOver1000:
+      sub.w #1000,R5 ;Subtract and 
+      inc.b R11    ;keep track of how many times subtracted 1000 
+      cmp #1000,R5
+      jge DrawIntOver1000  ;until its no longer >=1000
+
+     ;Draw and reset R11
+      call #DrawIntDrawR11
+      
+      inc.b R6 ;Increment R6
+
+      jmp DrawIntOver100;Continue on to DrawIntOver100
+
+DrawIntOver100:
+      
+      cmp #100,R5
+      jlo DrawIntOver100Already  ;Check if it's bellow 100. Otherwise, 
+      
+      sub.w #100,R5 ;Subtract and 
+      inc.b R11    ;keep track of how many times subtracted 100
+      jmp DrawIntOver100  ;until its no longer >=100
+      
+      DrawIntOver100Already:
+      
+      ;Draw and reset R11
+      call #DrawIntDrawR11
+      inc.b R6 ;Increment R6      
+
+      jmp DrawIntOver10 ;Continue on to DrawIntOver10
+      
+DrawIntOver10:
+      cmp #10,R5
+      jlo DrawIntOver10Already  ;Check if we're already under 10. Otherwise...
+
+      sub.w #10,R5 ;Subtract and 
+      inc.b R11    ;keep track of how many times subtracted 1000 
+      jmp DrawIntOver10  ;until its no longer >=10
+
+      DrawIntOver10Already:
+
+      ;Draw and reset
+      call #DrawIntDrawR11
+      inc.b R6 ;Increment R6      
+      
+      ;Jump to DrawDigit. It has a return so we'll return once we draw the last digit
+      jmp DrawDigit
+
+
+DrawIntDrawR11:
+      push.w R5 ;Save R5
+      mov.w R11,R5 ;Move R11 to R5
+      call #DrawDigit ;Draw R11 (now in R5)
+      pop.w R5 ;Return R5
+      mov.b #0,R11 ;Reset R11 for the next subroutine.
+      ret
+
+
+
+;Clears the LCD, then returns
 ClearLCD:
         MOV.W   #2,&LCDCMEMCTL
-        jmp     fin
-        
-        
+        BIS.W   #1,&LCDCCTL0
+        ret
+	
 intReturn:
-
         reti                            ; Return from interrupt
     
 fin:    RET
