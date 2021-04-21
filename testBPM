@@ -236,6 +236,8 @@ startRead:
         mov     #TASSEL_2+MC_1+ID_3, &TA0CTL  ;Set timer according to next table
         MOV     #0,R6
         MOV     #1,R5
+        MOV     #0,R8
+        MOV     #0,R7
 
 	nop
         ; Uses SMCLK and up mode
@@ -704,7 +706,7 @@ DrawInfo:
 DrawInfoCont:
     pop.w R11
     inc.w R8
-    ret
+    reti
 
 DrawBat6:
     mov.w #0,R8
