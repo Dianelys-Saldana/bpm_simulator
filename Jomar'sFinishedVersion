@@ -132,7 +132,7 @@ normal_fin:
         
         
 Delay:                                   ;----------------------------------------              Jomar Santos           ---------------------------------------------------------
-        MOV     #65000,R10               ;This funtion passes a 50000 to R13 so that it funtions as a delay to accurately carry out the funtions of the calculator.
+        MOV     #65000,R10               ;This funtion passes a 65000 to R13 so that it funtions as a delay to accurately carry out the funtions of the calculator.
         
 Next:
         dec     R10                      ;Here we loop through Next until R13 is 0.
