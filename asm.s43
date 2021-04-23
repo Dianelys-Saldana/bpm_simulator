@@ -29,7 +29,6 @@ letterL db 0x00, 0x00, 0x50, 0x50, 0x82, 0x02, 0x00, 0x00, 0x50, 0x00, 0x00, 0x5
 BatH     db 0x10, 0x30, 0x30, 0x70, 0x70, 0xF0, 0xF0
 BatL     db 0x00, 0x00, 0x20, 0x20, 0x60, 0x60, 0xE0
 
-
         ORG     0FFE8h                  ; vector for TIMER_A0
         DC16    TIMER_A0_ISR            ; set vector for 'TIMER_A0_ISR' routine
 
@@ -151,7 +150,7 @@ Next:
         jnz     Next
         ret
 
-;Objective: Return from interrupt
+;Objective: Return from interrupt without delay
 ;Preconditions: 
 ;Postconditions: 
 ;Author: 
@@ -210,14 +209,24 @@ PORT1_ISR:
         cmp     #6,R13
         jeq     state6                  ;When displaying SAVE on LCD if S1 pressed it saves if S2 pressed it doesn't save
         cmp     #7,R13
-        jeq     state7
+        jeq     state7                  ;State when Displaying LOGs
         jmp     fin                     ; go to end of ISR
 
+;Objective: Handles button inputs when in the OPTION screen
+;Preconditions: 
+;Postconditions: 
+;Author: 
+;Date:         
 state0:
         bit.b   #00000010b, &P1IFG ;OPTION screen wait for Button
         jnz     fin
         inc     R13
 
+;Objective: Draws the word READ
+;Preconditions:
+;Postconditions: 
+;Author:
+;Date:         
 Reads:
         Call    #ClearLCD
         Mov     #5,R5
@@ -231,16 +240,19 @@ Reads:
  ;       Call    #Delay
         jmp     fin
 
-
+;Objective: Handles button inputs when switching between READ and LOG when READ is displayed
+;Preconditions:
+;Postconditions: 
+;Author:
+;Date:         
 state1:
         bit.b   #00000010b, &P1IFG 
         jnz     readBPM  ;Launch ReadBPM
-        mov.w #0,R15 ;Reset the log page
         inc     R13 ;Switch to Log
 
 
 ;Objective: Display 'LOG' when the push button S2 is pressed.
-;Preconditions: LCD is cleared.
+;Preconditions:
 ;Postconditions: 'LOG' is displayed on the screen. 
 ;Author: Dianelys Saldana
 ;Date: April 20th, 2021
@@ -260,7 +272,11 @@ Log:
 
       jmp fin
 
-
+;Objective: Pre-starts READ mode, setting the MSP430 to wait for the first heartbeat.
+;Preconditions:
+;Postconditions: 
+;Author:
+;Date:         
 readBPM:
         Call    #ClearLCD
         MOV.W   #0,R6 ;0 seconds have passed
@@ -269,33 +285,44 @@ readBPM:
         Mov     #3,R13 ;Switch to READ mode
         jmp     fin
 
+;Objective: Handles button inputs when switching between READ and LOG when LOG is displayed
+;Preconditions:
+;Postconditions: 
+;Author:
+;Date:         
 state2:
         bit.b   #00000010b, &P1IFG
         jnz     seeLog   ;Launch LOG 
-        mov.w #0,R15 ;Reset the log page
         dec     R13 ;Switch back to READ mode
         jmp     Reads
 
+;Objective: Handles displaying the saved BPMs on the MSP430
+;Preconditions:
+;Postconditions: MSP moved to State 7, Log 1 displayed, R15 set to 0
+;Author:
+;Date:         
 seeLog:
-
-        cmp #1,R15
-        jeq log2
-        cmp #2,R15
-        jeq log3
-        cmp #3,R15
-        jeq log4
-
+        
+        ;Oh lucky us we're running for the first time
         push    R11
         mov.w   #0,R11
-        mov.w   0x1980(R11),R7
+        mov.w   0x1980(R11),R7 ;Get the value for BPM1 and save it to where BPM is stored in Register
         pop     R11
-        Call    #DrawBPM
-        inc     R15
+        Call    #DrawBPM ;Call DrawBPM to draw the BPM
+        Mov     #7,R13
+        Mov     #0,R15
         jmp     fin
 
+
+;Objective: Handles button inputs when the LCD is displaying previously logged BPMs
+;Preconditions: R15 should be 0 or 1 to show Log 2 or 3 respectively
+;Postconditions: Log2 or Log 3 are displayed, or  the MSP430 is returned to OPTION (state 0)
+;Author:
+;Date:         
 state7:
         bit.b   #00000100b, &P1IFG
         jnz     fin_noDelay         
+        
         cmp     #0,R15
         jeq     log2
         cmp     #1,R15
@@ -304,6 +331,11 @@ state7:
         Mov     #0,R13
         jmp     fin
 
+;Objective: Displays Log 2
+;Preconditions:
+;Postconditions: 
+;Author:
+;Date:         
 log2:
         push    R11
         mov.w   #0,R11
@@ -313,6 +345,11 @@ log2:
         Inc     R15
         jmp     fin
 
+;Objective: Displays Log 3
+;Preconditions:
+;Postconditions: 
+;Author:
+;Date:         
 log3:
         push    R11
         mov.w   #0,R11
@@ -322,13 +359,11 @@ log3:
         Inc     R15
         jmp     fin
 
-log4:
-        ;We're out of log so decrement R13 and return
-        dec     R13 ;Switch back to READ mode
-        mov.w #0,R15 ; Reset the log page.
-        jmp     Reads
-
-
+;Objective: Handles starting the read of a BPM once S1 is pressed
+;Preconditions:
+;Postconditions: 
+;Author:
+;Date:         
 state3:
         bit.b   #00000100b, &P1IFG
         jnz     fin ;If it's not the heartbeat button then no we don't start sorry
@@ -336,6 +371,11 @@ state3:
         Call    #startRead
         jmp     Beat
 
+;Objective: Runs each beat. Turns on the heart icon
+;Preconditions:
+;Postconditions: 
+;Author:
+;Date:         
 Beat:
         bic.b   #00000010b, &P1IFG	;Reset interrupt flag
         nop
@@ -343,11 +383,16 @@ Beat:
 	;xor 	#CCIE, &TA0CCTL0
 	;nop
 	Mov.b   #00000100B, &0x0A22
-        Mov     #1,R14
+        Mov     #1,R14 ;Indicates heart icon is on.
         ;inc     R5                     Better to do out of this label cuz of 1st beat
 
 	jmp     fin
 
+;Objective: Starts the Timer for reading heartbeats
+;Preconditions:
+;Postconditions: 
+;Author:
+;Date:         
 startRead:
         mov     #CCIE, &TA0CCTL0       ; Enable TACCR0 interrupt
         mov     #CCIE, &TA1CCTL0       ; Enable TACCR0 interrupt
@@ -382,16 +427,30 @@ startRead:
         ;nop                             ; Required after enabling interrupts
         jmp     normal_fin
 
+;Objective: Determines if S1 was pressed, and if so, increments beats, and runs Beat
+;Preconditions:
+;Postconditions: 
+;Author:
+;Date:         
 state4:
         bit.b   #00000010b, &P1IFG 
         jnz     ActualState4  ;Only increment beats if S1 is pressed (according to specs)
 	jmp     fin
 
-
+;Objective: Increments Beat and runs Beat
+;Preconditions:
+;Postconditions: 
+;Author:
+;Date:         
 ActualState4:
         inc     R5 ;Increment R5
         jmp     Beat
 
+;Objective: Runs at each timer interrupt (once every .2 seconds). If 5 timer interrupts have been made, it jumps to TIME
+;Preconditions:
+;Postconditions: 
+;Author:
+;Date:         
 TIMER_A0_ISR:
         inc     timerResets
         ;cmp     #1, R14
@@ -409,13 +468,18 @@ TIMER_A0_ISR:
         jeq     time
         ;mov #0, intsCounter
         reti
-        
+
+
 TIMER_A1_ISR:
         cmp     #1, R14
         jeq     offHeart
         jmp     fin_noDelay
         
-
+;Objective: Turns off the heart icon
+;Preconditions:
+;Postconditions: 
+;Author:
+;Date:         
 offHeart:
         Bic.b   #00000100B, &0x0A22
         Mov     #0,R14
@@ -425,6 +489,11 @@ offHeart:
         ;jeq     time
         jmp     fin_noDelay
 
+;Objective: Runs every second. Increments seconds nad R6. Draws Information onto the screen, then resets TimerResets to indicate a reset has just occurred. If R6>30, timer is complete.
+;Preconditions:
+;Postconditions: 
+;Author:
+;Date:         
 time:
         inc     seconds
         inc     R6
@@ -437,6 +506,11 @@ time:
 
         reti
 
+;Objective: Stops the timer, and sets state to STATE 5
+;Preconditions:
+;Postconditions: 
+;Author:
+;Date:         
 TimerDone:
         Mov.b   #00001000B, &0x0A22
         mov     #TASSEL_2+MC_0+ID_3, &TA0CTL
@@ -444,6 +518,11 @@ TimerDone:
         reti
 
 ;[CALC BPM]------------------------------------------------------------------------------------------------------------------------------
+;Objective: Calculates the Beats per minute and return it to R7
+;Preconditions: R6 (time) must either be 6, 12, 18, 24, or 30 for the calculation to work. Beats must be on R5
+;Postconditions: BPM on R7
+;Author: Ignacio Tampe
+;Date: 4/14/2021
 CalcBPM:
 ;Check if R6 is 6,12,18,24, or 30
 
@@ -476,7 +555,7 @@ CalcBPMPreRet:
     pop R5 ;Same with R5
 
     ret ;Now let's get the blazes out of here.
-    
+
 CalcBPM6:
     ;If 6, add the contents of R5 10 times into R7.
     mov.w #10,R12
@@ -530,6 +609,11 @@ CalcBPMDivide:
 
 ;[DRAW INFO]------------------------------------------------------------------------------------------------------------------------------
 
+;Objective: Draws Information ot the screen, including bars, and if necessary, BPM. Recalculates BPM if necessary.
+;Preconditions: Beats must be on R5, Time must be on R6, R8 must be from 0-6.
+;Postconditions: Information is drawn on the screen.
+;Author: Ignacio Tampe
+;Date: 4/14/2021
 DrawInfo:
     push.w R11
     mov.b #1,R11
@@ -553,7 +637,11 @@ DrawBat6:
     call #DrawBPM
     jmp DrawInfoCont
 
-;Draws the BPM onto the LCD (000BPM)
+;Objective: Draws only the BPM to the screen (no battery bars). Does *NOT* calculate BPM
+;Preconditions: R7 must contain the BPM to draw and must be below 999.
+;Postconditions: BPM only is drawn on screen.
+;Author: Ignacio Tampe
+;Date: 4/14/2021
 DrawBPM:
     push.w R6
     push.w R11
@@ -606,7 +694,11 @@ DrawBPMOver10:
 
 ;[DRAW INT (Re-Used)]------------------------------------------------------------------------------------------------------------------------------
 
-;Draws an unsigned (assume positive) integer WITHOUT ensuring that R5, R6, and R11 are preserved.
+;Objective: Draws an unsigned (assumed positive) integer at position R6 WITHOUT ensuring that R5, R6, and R11 are preserved. Should only be used internally by DrawInt
+;Preconditions: Integerger value must be at R5 and must be positive unsigned. Position value must be at R6 and must be 1-6
+;Postconditions: int at R5 is drawn at position R6 on the LCD. Registers may have been modified.
+;Author: Ignacio Tampe (igtampe)
+;Date: 3/7/2021
 DrawIntDirect:
       mov.b #0,R11 ;reset R11 becuase we're going to use it to *count*
 
@@ -618,6 +710,12 @@ DrawIntDirect:
 
       cmp.w #10,R5
       jge DrawIntOver10 ;If it's over 10
+
+;Objective: Draws digit or sign in R5 (0-13) at position R6 (1-6) on the LCD. 
+;Preconditions: Value to draw must be on R5, and position must be on R6
+;Postconditions: R5's value is drawn to R6 on the LCD. Nothing is changed
+;Author: Ignacio Tampe (igtampe)
+;Date: 3/7/2021
 DrawDigit:
 
       ;Draw the specific digit
@@ -641,6 +739,13 @@ DrawDigit:
 
       ret
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;(The following subroutines DrawDigit1 - DrawDigit6) can be described using the following comment)
+;Objectives: Draws digit or sign in R5 (0-13) at position N on the LCD (Where N represents the number at the end of DrawDigitN). 
+;Preconditions: Value to draw must be on R5
+;Postconditions: R5's value is drawn to N on the LCD. Nothing is changed
+;Author: Ignacio Tampe (igtampe)
+;Date: 3/7/2021
 DrawDigit1:
       MOV.B #9,R11 ;Reuse R11 because why not
       MOV.B DigitH(R5),0xA20(R11)
@@ -679,6 +784,13 @@ ret
 
 ;;;;;;;;;;DRAWINT SUBROUTINES;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;The following subroutines are meant to be *internal* and should not be used outside of DrawInt
+
+;Objectives: Handles the process of drawing an integer over 1000.
+;Preconditions: Value to draw must be on R5 and must be at least over 1000. R11 must already be 0
+;Postconditions: R5's Thousands place is drawn to the LCD at position R6. R5's thousands place is removed, and R6 is incremented. R11's value is returned to 0 when done. Hands off process to DrawIntOver100
+;Author: Ignacio Tampe (igtampe)
+;Date: 3/7/2021
 DrawIntOver1000:
       sub.w #1000,R5 ;Subtract and 
       inc.b R11    ;keep track of how many times subtracted 1000 
@@ -692,6 +804,11 @@ DrawIntOver1000:
 
       jmp DrawIntOver100;Continue on to DrawIntOver100
 
+;Objectives: Handles the process of drawing an integer over 100.
+;Preconditions: Value to draw must be on R5. R11 must already be 0
+;Postconditions: R5's Hundreds place is drawn to the LCD at position R6. R5's Hundreds place is removed, and R6 is incremented. R11's value is returned to 0 when done. Hands off process to DrawIntOver10
+;Author: Ignacio Tampe (igtampe)
+;Date: 3/7/2021
 DrawIntOver100:
       
       cmp #100,R5
@@ -709,6 +826,11 @@ DrawIntOver100:
 
       jmp DrawIntOver10 ;Continue on to DrawIntOver10
       
+;Objectives: Handles the process of drawing an integer over 10.
+;Preconditions: Value to draw must be on R5. R11 must already be 0
+;Postconditions: R5's tens place is drawn to the LCD at position R6. R5's tens place is removed, and R6 is incremented. R11's value is returned to 0 when done. Hands off process to DrawDigit
+;Author: Ignacio Tampe (igtampe)
+;Date: 3/7/2021
 DrawIntOver10:
       cmp #10,R5
       jlo DrawIntOver10Already  ;Check if we're already under 10. Otherwise...
@@ -726,7 +848,11 @@ DrawIntOver10:
       ;Jump to DrawDigit. It has a return so we'll return once we draw the last digit
       jmp DrawDigit
 
-
+;Objectives: Handles the process of drawing a digit that's in R11 and clearing R11. INTERNAL USE ONLY FOR DrawIntOver(N) SUBROUTINES.
+;Preconditions: Value to draw must be in R11 and must be between 0-9. Position to draw R11 must be on R6
+;Postconditions: R11 is drawn to position R6, and is then set to 0. R5 is preserved.
+;Author: Ignacio Tampe (igtampe)
+;Date: 3/7/2021
 DrawIntDrawR11:
       push.w R5 ;Save R5
       mov.w R11,R5 ;Move R11 to R5
@@ -735,6 +861,13 @@ DrawIntDrawR11:
       mov.b #0,R11 ;Reset R11 for the next subroutine.
       ret
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;Objectives: Handles button during State 5.
+;Preconditions: 
+;Postconditions:
+;Author:
+;Date:
 state5:
       bit.b   #00000010b, &P1IFG      ; Test P1IFG to detect if there is
                                       ; an interrupt generated by P1.1
@@ -766,6 +899,11 @@ Save:
         inc      R13
         jmp      fin
 
+;Objectives: Handles button input during State 6. If S1 is pressed, SAVE is executed, the BPM is saved to memory
+;Preconditions: 
+;Postconditions: 
+;Author:
+;Date:
 state6:
         bit.b   #00000010b, &P1IFG
         jnz     SaveBPM
@@ -778,7 +916,7 @@ state6:
 ;Preconditions: R11 will be used as index
 ;Postconditions: The last BPM was saved
 ;Author: Ignacio Tampe
-;Date:        
+;Date: 4/14/2021
 SaveBPM:
         push.w R11 
 
@@ -797,6 +935,11 @@ SaveBPM:
         reti                            
 
 
+;Objectives: Clears the LCD
+;Preconditions: LCD is already initialized
+;Postconditions: LCD is cleared
+;Author:
+;Date:
 ClearLCD:
         MOV.W   #2,&LCDCMEMCTL
         ret
