@@ -395,7 +395,7 @@ TIMER_A0_ISR:
 TIMER_A1_ISR:
         cmp     #1, R14
         jeq     offHeart
-        jmp     fin
+        jmp     fin_noDelay
         
 
 offHeart:
@@ -405,7 +405,7 @@ offHeart:
         ;BIS.W   #1,&LCDCCTL0
         ;cmp     #5,timerResets
         ;jeq     time
-        jmp     fin
+        jmp     fin_noDelay
 
 time:
         inc     seconds
