@@ -12,7 +12,7 @@
         PUBLIC  main                    ; make the main label vissible
                                         ; outside this module
 
-        ORG     01C00h                  ; To count how many times button S1 
+        ORG     1986h                  ; To count how many times button S1 
 pushCount dw    0                       ; is pressed
 seconds         DW 0
 timerResets     DW 0                    ;When this hits 5, a second has passed
@@ -107,7 +107,17 @@ UnlockGPIO:                             ; Disable de GPIO power-on default
         BIS.W   #1,&LCDCCTL0
 
 
+        Mov     #0,R5
+        Mov     #0,R6
+        Mov     #0,R7
+        Mov     #0,R8
+        Mov     #0,R9
+        Mov     #0,R10
+        Mov     #0,R11
+        Mov     #0,R12
         Mov     #0,R13
+        Mov     #0,R14
+        Mov     #0,R15
 
 
 Start:
